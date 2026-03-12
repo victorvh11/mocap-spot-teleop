@@ -1,0 +1,25 @@
+# Spot driver configuration
+# Edit these values for your specific robot
+
+/**:
+  ros__parameters:
+    # Spot network credentials
+    # Can also be set via environment variables:
+    #   BOSDYN_CLIENT_USERNAME, BOSDYN_CLIENT_PASSWORD, SPOT_IP
+    hostname: "192.168.80.3"
+    username: "admin"
+    password: "spotadmin2017"
+
+    # Camera configuration
+    cameras_used:
+      - "frontleft"
+      - "frontright"
+      - "hand"
+
+    # Publish settings
+    publish_rgb: true
+    publish_depth: true
+    publish_point_clouds: false
+
+    # TF
+    preferred_odom_frame: "odom"

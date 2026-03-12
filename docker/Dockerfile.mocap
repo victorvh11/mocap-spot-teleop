@@ -1,0 +1,44 @@
+# Dockerfile.mocap - MOCAP4ROS2 OptiTrack (standalone)
+# Based on user's original Dockerfile
+
+FROM osrf/ros:humble-desktop
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    curl wget git vim \
+    build-essential \
+    python3-pip \
+    python3-colcon-common-extensions \
+    python3-vcstool \
+    python3-rosdep \
+    clang-format \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /root/mocap4r2_ws
+
+RUN mkdir -p src && cd src && \
+    git clone https://github.com/MOCAP4ROS2-Project/mocap4ros2_optitrack.git
+
+RUN cd src && \
+    vcs import < mocap4ros2_optitrack/dependency_repos.repos && \
+    if [ -d mocap4r2 ]; then cd mocap4r2 && git checkout humble-devel; fi
+
+RUN rosdep update && \
+    rosdep install --from-paths src --ignore-src -r -y \
+        --skip-keys "ament_cmake_clang_format"
+
+RUN find /root/mocap4r2_ws/src -name "*.hpp" -o -name "*.cpp" | \
+    xargs grep -rl "tf2/buffer_core.h" 2>/dev/null | \
+    xargs -r sed -i 's|#include "tf2/buffer_core.h"|#include "tf2_ros/buffer.h"|g'
+
+RUN /bin/bash -c "source /opt/ros/humble/setup.bash && \
+    colcon build --symlink-install"
+
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
+    echo "source /root/mocap4r2_ws/install/setup.bash" >> /root/.bashrc
+
+EXPOSE 1510/udp 1511/udp
+
+ENTRYPOINT ["/bin/bash", "-c", "source /opt/ros/humble/setup.bash && source /root/mocap4r2_ws/install/setup.bash && exec \"$@\"", "--"]
+CMD ["/bin/bash"]

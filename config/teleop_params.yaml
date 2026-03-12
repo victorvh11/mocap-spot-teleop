@@ -1,0 +1,195 @@
+# =============================================================================
+# spot_mocap_teleop - Configuration
+# Teleoperation of Spot arm via OptiTrack motion capture glove
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# OptiTrack / MOCAP Glove Configuration
+# ---------------------------------------------------------------------------
+mocap_glove:
+  ros__parameters:
+    # Rigid body name configured in Motive for the glove
+    glove_rigid_body_name: "GloveRB"
+
+    # Frame IDs
+    mocap_frame_id: "mocap_world"
+    glove_frame_id: "glove_ee"
+
+    # OptiTrack topic from mocap4ros2
+    mocap_markers_topic: "/mocap4r2_optitrack/rigid_bodies"
+    mocap_tf_topic: "/mocap4r2_optitrack/rigid_body_tf"
+
+    # Initial calibration pose of glove (meters, in mocap frame)
+    # Operator stands in T-pose, hand extended forward
+    calibration_offset:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+
+    # Scaling factor: mocap workspace -> robot workspace
+    # Adjust based on operator reach vs. Spot arm reach (~0.95m)
+    position_scale:
+      x: 0.6
+      y: 0.6
+      z: 0.6
+
+    # Update rate (Hz)
+    publish_rate: 100.0
+
+# ---------------------------------------------------------------------------
+# Motion Filter Configuration (Low-pass + rate limiter)
+# ---------------------------------------------------------------------------
+motion_filter:
+  ros__parameters:
+    # Butterworth low-pass filter
+    filter_type: "butterworth"  # butterworth | exponential
+    filter_order: 2
+    cutoff_frequency_hz: 5.0   # Cut above 5 Hz (human hand ~2-5Hz useful)
+    sampling_rate_hz: 100.0
+
+    # Exponential moving average (if filter_type == exponential)
+    ema_alpha: 0.15
+
+    # Maximum velocity limit (m/s) for end effector
+    max_linear_velocity: 0.5
+    # Maximum angular velocity (rad/s)
+    max_angular_velocity: 1.0
+
+    # Maximum acceleration (m/s²)
+    max_linear_acceleration: 2.0
+    max_angular_acceleration: 4.0
+
+    # Dead zone radius (m) - ignore movements smaller than this
+    position_deadzone: 0.005
+    orientation_deadzone: 0.02  # radians
+
+    # Output topic
+    filtered_pose_topic: "/teleop/filtered_pose"
+
+# ---------------------------------------------------------------------------
+# Workspace Limiter / Safety Boundaries
+# ---------------------------------------------------------------------------
+workspace_limiter:
+  ros__parameters:
+    # Spot arm workspace limits (meters, relative to body frame)
+    # Based on Spot arm reach of ~0.95m
+    workspace_bounds:
+      x_min: 0.2     # Don't reach behind the robot
+      x_max: 0.85    # Forward reach limit
+      y_min: -0.50   # Left limit
+      y_max: 0.50    # Right limit
+      z_min: -0.25   # Below body (limited to avoid ground collision)
+      z_max: 0.45    # Above body
+
+    # Soft boundary margin (m) - start slowing down here
+    soft_margin: 0.10
+
+    # Clamp vs. reject out-of-bounds commands
+    boundary_mode: "clamp"  # clamp | reject | soft_limit
+
+    # Orientation limits (rad)
+    max_pitch: 1.57   # ±90°
+    max_roll: 1.57    # ±90°
+    max_yaw: 3.14     # ±180°
+
+    # Self-collision check
+    enable_self_collision_check: true
+    min_distance_to_body: 0.15  # meters
+
+    # Output topic
+    safe_pose_topic: "/teleop/safe_pose"
+
+# ---------------------------------------------------------------------------
+# Spot Arm Commander
+# ---------------------------------------------------------------------------
+spot_arm_commander:
+  ros__parameters:
+    # Spot robot config
+    spot_name: ""  # Leave empty if no namespace
+
+    # Command mode
+    command_mode: "cartesian"  # cartesian | joint
+
+    # Reference frame for arm commands
+    root_frame: "body"   # body | odom | vision
+    tool_frame: "hand"   # hand | custom
+
+    # Command rate (Hz) - Spot accepts commands up to 10Hz via SDK
+    command_rate: 10.0
+
+    # Motion parameters
+    # Maximum time allowed for arm to reach target (seconds)
+    command_timeout: 2.0
+
+    # Stiffness settings
+    use_force_feedback: false
+    stiffness_x: 500.0
+    stiffness_y: 500.0
+    stiffness_z: 500.0
+
+    # Gripper control (future: map to glove finger tracking)
+    gripper_open_angle: 0.0
+    gripper_close_angle: 1.5708
+
+    # Topics
+    arm_state_topic: "/spot/arm/state"
+    robot_command_action: "/robot_command"
+
+# ---------------------------------------------------------------------------
+# Safety Monitor
+# ---------------------------------------------------------------------------
+safety_monitor:
+  ros__parameters:
+    # Emergency stop conditions
+    max_force_threshold: 50.0   # Newtons - trigger e-stop
+    max_torque_threshold: 20.0  # Nm
+
+    # Heartbeat timeout (seconds) - stop if no mocap data
+    mocap_timeout: 0.5
+    command_timeout: 1.0
+
+    # Velocity watchdog
+    velocity_watchdog_limit: 1.0  # m/s
+
+    # Enable/disable safety features
+    enable_force_limit: true
+    enable_velocity_watchdog: true
+    enable_heartbeat_monitor: true
+    enable_workspace_monitor: true
+
+    # Recovery behavior on safety trigger
+    recovery_action: "stow"  # stow | freeze | soft_stop
+
+# ---------------------------------------------------------------------------
+# Rosbag Recording
+# ---------------------------------------------------------------------------
+rosbag_recorder:
+  ros__parameters:
+    # Output directory for bags
+    bag_output_dir: "/root/rosbag_data"
+    bag_name_prefix: "spot_teleop"
+
+    # Topics to record
+    record_topics:
+      # OptiTrack raw data
+      - "/mocap4r2_optitrack/rigid_bodies"
+      - "/mocap4r2_optitrack/markers"
+      # Processed glove data
+      - "/teleop/raw_glove_pose"
+      - "/teleop/filtered_pose"
+      - "/teleop/safe_pose"
+      # Spot state data
+      - "/spot/status/joint_states"
+      - "/spot/status/end_effector_force"
+      - "/spot/status/robot_state"
+      - "/joint_states"
+      - "/tf"
+      - "/tf_static"
+      # Safety data
+      - "/teleop/safety_status"
+      - "/teleop/diagnostics"
+
+    # Recording mode
+    auto_start: false
+    max_bag_duration_sec: 600  # 10 min max per bag
+    compression: "zstd"        # none | zstd

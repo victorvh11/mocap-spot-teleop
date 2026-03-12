@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # MOCAP4ROS2 OptiTrack Driver
+  # Connects to Motive via multicast UDP and publishes rigid body data
+  # ============================================================================
+  mocap4ros2_optitrack:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.mocap
+    container_name: mocap4ros2_optitrack
+    network_mode: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./config:/root/mocap4r2_ws/src/mocap4ros2_optitrack/mocap4r2_optitrack_driver/config
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        source /root/mocap4r2_ws/install/setup.bash &&
+        ros2 launch mocap4r2_optitrack_driver optitrack2.launch.py
+      "
+    restart: unless-stopped
+
+  # ============================================================================
+  # Spot ROS2 Driver
+  # Connects to Spot and exposes all topics/services/actions
+  # ============================================================================
+  spot_driver:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: spot_driver
+    network_mode: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - BOSDYN_CLIENT_USERNAME=${SPOT_USERNAME:-admin}
+      - BOSDYN_CLIENT_PASSWORD=${SPOT_PASSWORD:-}
+      - SPOT_IP=${SPOT_IP:-192.168.80.3}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ../config:/root/teleop_ws/src/spot_mocap_teleop/config
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "
+        ros2 launch spot_driver spot_driver.launch.py
+        config_file:=/root/teleop_ws/src/spot_mocap_teleop/config/spot_config.yaml
+        launch_rviz:=False
+      "
+    restart: unless-stopped
+    depends_on:
+      - mocap4ros2_optitrack
+
+  # ============================================================================
+  # Spot MoCap Teleop Pipeline
+  # All teleop nodes (processor, filter, limiter, commander, safety, recorder)
+  # ============================================================================
+  spot_teleop:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: spot_teleop
+    network_mode: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ../config:/root/teleop_ws/src/spot_mocap_teleop/config
+      - rosbag_data:/root/rosbag_data
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "
+        ros2 launch spot_mocap_teleop spot_mocap_teleop.launch.py
+      "
+    restart: unless-stopped
+    depends_on:
+      - mocap4ros2_optitrack
+      - spot_driver
+
+  # ============================================================================
+  # RViz Visualization (optional)
+  # ============================================================================
+  rviz:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: spot_teleop_rviz
+    network_mode: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "
+        ros2 run rviz2 rviz2
+      "
+    profiles:
+      - viz
+    depends_on:
+      - spot_teleop
+
+volumes:
+  rosbag_data:
+    driver: local
