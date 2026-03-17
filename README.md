@@ -8,8 +8,66 @@ This system captures hand movements from an operator wearing a glove with OptiTr
 
 ## Architecture
 
-<img width="4043" height="5116" alt="spot_mocap_teleop_diagram" src="https://github.com/user-attachments/assets/367591c7-c346-4037-a232-b1ead8812198" />
-
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        PC Motive (Windows)                              │
+│                    OptiTrack Camera System                              │
+│               Streams rigid body via UDP Multicast                      │
+└──────────────────────────┬──────────────────────────────────────────────┘
+                           │ UDP 1510-1511 (NatNet)
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Docker: mocap4ros2_optitrack                          │
+│  ┌──────────────────────────────────────────────────┐                   │
+│  │  MOCAP4ROS2 OptiTrack Driver (lifecycle node)    │                   │
+│  │  Publishes: /mocap4r2_optitrack/rigid_bodies     │                   │
+│  └──────────────────────┬───────────────────────────┘                   │
+└─────────────────────────┼───────────────────────────────────────────────┘
+                          │ ROS2 Topics (DDS)
+                          ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Docker: spot_teleop                                   │
+│                                                                         │
+│  ┌─────────────────┐     ┌─────────────┐     ┌──────────────────┐      │
+│  │ MocapGlove      │────▶│ MotionFilter │────▶│ WorkspaceLimiter │      │
+│  │ Processor       │     │ (Butterworth │     │ (Bounds check,   │      │
+│  │ (Extract glove  │     │  + rate      │     │  self-collision  │      │
+│  │  RB, calibrate, │     │  limiting)   │     │  avoidance)      │      │
+│  │  scale)         │     └──────────────┘     └────────┬─────────┘      │
+│  └─────────────────┘                                    │               │
+│                                                         ▼               │
+│  ┌─────────────────┐     ┌──────────────────────────────────────┐      │
+│  │ SafetyMonitor   │◀───▶│ SpotArmCommander                     │      │
+│  │ (Heartbeat,     │     │ (ArmCartesianCommand via             │      │
+│  │  force limits,  │     │  /robot_command action)              │      │
+│  │  velocity check)│     └──────────────────┬───────────────────┘      │
+│  └─────────────────┘                        │                           │
+│                                              │                           │
+│  ┌─────────────────┐     ┌──────────────────┘                           │
+│  │ TeleopManager   │     │                                              │
+│  │ (Orchestration, │     │  ┌────────────────┐                          │
+│  │  lifecycle)     │     │  │ RosbagRecorder │                          │
+│  └─────────────────┘     │  │ (All topics)   │                          │
+│                          │  └────────────────┘                          │
+└──────────────────────────┼──────────────────────────────────────────────┘
+                           │ ROS2 Action: /robot_command
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Docker: spot_driver                                   │
+│  ┌──────────────────────────────────────────────────┐                   │
+│  │  spot_ros2 Driver (bdaiinstitute/spot_ros2)      │                   │
+│  │  - Topics, services, actions for Spot control    │                   │
+│  │  - Arm cartesian commands → Spot SDK → Robot     │                   │
+│  └──────────────────────┬───────────────────────────┘                   │
+└─────────────────────────┼───────────────────────────────────────────────┘
+                          │ Spot SDK (gRPC)
+                          ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Boston Dynamics Spot                                  │
+│                    (WiFi / Ethernet)                                     │
+│                    Arm end-effector follows glove movements              │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
 ## Data Flow Pipeline
 

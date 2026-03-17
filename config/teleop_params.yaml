@@ -13,25 +13,35 @@ mocap_glove:
 
     # Frame IDs
     mocap_frame_id: "mocap_world"
-    glove_frame_id: "glove_ee"
 
-    # OptiTrack topic from mocap4ros2
-    mocap_markers_topic: "/mocap4r2_optitrack/rigid_bodies"
-    mocap_tf_topic: "/mocap4r2_optitrack/rigid_body_tf"
+    # Scaling: ratio of robot workspace to operator workspace.
+    # Example: scale=0.5 means 40cm hand movement -> 20cm EE movement.
+    # Spot arm reach is ~0.95m, so with scale=0.5 the operator has
+    # roughly 1.7m of usable range in each direction.
+    position_scale:
+      x: 0.5
+      y: 0.5
+      z: 0.5
 
-    # Initial calibration pose of glove (meters, in mocap frame)
-    # Operator stands in T-pose, hand extended forward
-    calibration_offset:
-      x: 0.0
+    # Arm home pose (body frame): EE resting position before teleop.
+    # Deltas from hand movement are ADDED to this pose.
+    # Spot "ready" position is approximately (0.5, 0, 0).
+    arm_home_pose:
+      x: 0.5
       y: 0.0
       z: 0.0
 
-    # Scaling factor: mocap workspace -> robot workspace
-    # Adjust based on operator reach vs. Spot arm reach (~0.95m)
-    position_scale:
-      x: 0.6
-      y: 0.6
-      z: 0.6
+    # Axis mapping: OptiTrack and Spot body frames may differ.
+    # sign: flip axis direction (1.0 or -1.0)
+    # order: remap axes [0=X, 1=Y, 2=Z]
+    #   e.g. order=[0,2,1] swaps mocap Y and Z
+    # Adjust these after testing which mocap axis corresponds to which
+    # robot axis in your physical setup.
+    axis_mapping:
+      sign_x: 1.0
+      sign_y: 1.0
+      sign_z: 1.0
+      order: [0, 1, 2]
 
     # Update rate (Hz)
     publish_rate: 100.0
